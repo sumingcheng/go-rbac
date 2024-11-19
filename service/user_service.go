@@ -1,79 +1,108 @@
 package service
 
 import (
-	"rbac/dto"
-	"rbac/model"
+	"rbac/internal/middleware"
 
-	"gorm.io/gorm"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	"golang.org/x/crypto/bcrypt"
 )
 
-type RBACService struct {
-	db *gorm.DB
+type UserService struct {
+	db *sqlx.DB
 }
 
-func NewRBACService(db *gorm.DB) *RBACService {
-	return &RBACService{db: db}
+// 确保 UserService 实现了 AuthService 接口
+var _ middleware.AuthService = (*UserService)(nil)
+
+func NewUserService(db *sqlx.DB) *UserService {
+	return &UserService{db: db}
 }
 
-// CreateUser 创建用户
-func (s *RBACService) CreateUser(user *model.User) (*dto.UserDTO, error) {
-	if err := s.db.Create(user).Error; err != nil {
-		return nil, err
-	}
-	return s.convertToUserDTO(user), nil
-}
-
-// AssignRoleToUser 为用户分配角色
-func (s *RBACService) AssignRoleToUser(userID string, roleID string) error {
-	var user model.User
-	var role model.Role
-
-	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
-		return err
-	}
-	if err := s.db.First(&role, "id = ?", roleID).Error; err != nil {
+func (s *UserService) CreateUser(username, password string) error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
 		return err
 	}
 
-	return s.db.Model(&user).Association("Roles").Append(&role)
+	_, err = s.db.Exec(
+		"INSERT INTO users (username, password) VALUES (?, ?)",
+		username, string(hashedPassword),
+	)
+	return err
 }
 
-// CheckPermission 检查用户是否有某个权限
-func (s *RBACService) CheckPermission(userID string, resource string, action string) bool {
-	var user model.User
-	if err := s.db.Preload("Roles.Permissions").First(&user, "id = ?", userID).Error; err != nil {
-		return false
-	}
-
-	for _, role := range user.Roles {
-		for _, perm := range role.Permissions {
-			if perm.Resource == resource && perm.Action == action {
-				return true
-			}
-		}
-	}
-	return false
+func (s *UserService) AssignRole(userID, roleID int) error {
+	_, err := s.db.Exec(
+		"INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
+		userID, roleID,
+	)
+	return err
 }
 
-// 转换方法
-func (s *RBACService) convertToUserDTO(user *model.User) *dto.UserDTO {
-	userDTO := &dto.UserDTO{
-		ID:        user.ID,
-		Name:      user.Name,
-		Email:     user.Email,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
+func (s *UserService) HasPermission(userID int, permissionName string) (bool, error) {
+	var count int
+	err := s.db.Get(&count, `
+        SELECT COUNT(*) FROM users u 
+        JOIN user_roles ur ON u.id = ur.user_id 
+        JOIN roles r ON ur.role_id = r.id 
+        JOIN role_permissions rp ON r.id = rp.role_id 
+        JOIN permissions p ON rp.permission_id = p.id 
+        WHERE u.id = ? AND p.name = ?`,
+		userID, permissionName,
+	)
+	return count > 0, err
+}
+
+func (s *UserService) ValidateToken(token string) (int, error) {
+	var userID int
+	err := s.db.Get(&userID, "SELECT id FROM users WHERE token = ?", token)
+	if err != nil {
+		return 0, err
+	}
+	return userID, nil
+}
+
+func (s *UserService) CheckPermission(userID int, permission string) (bool, error) {
+	var count int
+	err := s.db.Get(&count, `
+		SELECT COUNT(*) FROM users u
+		JOIN user_roles ur ON u.id = ur.user_id
+		JOIN role_permissions rp ON ur.role_id = rp.role_id
+		JOIN permissions p ON rp.permission_id = p.id
+		WHERE u.id = ? AND p.name = ?
+	`, userID, permission)
+	return count > 0, err
+}
+
+func (s *UserService) Login(username, password string) (string, error) {
+	var user struct {
+		ID       int
+		Password string
 	}
 
-	for _, role := range user.Roles {
-		roleDTO := dto.RoleDTO{
-			ID:          role.ID,
-			Name:        role.Name,
-			Description: role.Description,
-			CreatedAt:   role.CreatedAt,
-		}
-		userDTO.Roles = append(userDTO.Roles, roleDTO)
+	err := s.db.Get(&user, "SELECT id, password FROM users WHERE username = ?", username)
+	if err != nil {
+		return "", err
 	}
 
-	return userDTO
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return "", err
+	}
+
+	// 生成token
+	token := generateToken() // 你需要实现这个函数，可以使用UUID或其他方式
+
+	// 更新用户token
+	_, err = s.db.Exec("UPDATE users SET token = ? WHERE id = ?", token, user.ID)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+func generateToken() string {
+	// 这里可以使用UUID或其他方式生成token
+	return uuid.New().String()
 }

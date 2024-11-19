@@ -2,33 +2,32 @@ package main
 
 import (
 	"rbac/controller"
+	"rbac/internal/config"
+	"rbac/internal/database"
+	"rbac/internal/router"
 	"rbac/service"
-
-	"github.com/gin-gonic/gin"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 )
 
-func initDB() *gorm.DB {
-	dsn := "root:your_password@tcp(localhost:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic("连接数据库失败: " + err.Error())
-	}
-	return db
-}
-
 func main() {
-	db := initDB() // 初始化数据库连接
+	cfg := config.NewConfig()
+	db := database.InitDB(cfg)
 
-	rbacService := service.NewRBACService(db)
-	rbacController := controller.NewRBACController(rbacService)
+	// 初始化 services
+	userService := service.NewUserService(db)
+	roleService := service.NewRoleService(db)
+	permissionService := service.NewPermissionService(db)
 
-	r := gin.Default()
+	// 初始化 controllers
+	userController := controller.NewUserController(userService)
+	roleController := controller.NewRoleController(roleService)
+	permissionController := controller.NewPermissionController(permissionService)
 
-	// 用户相关路由
-	r.POST("/users", rbacController.CreateUser)
-	r.POST("/users/:userID/roles/:roleID", rbacController.AssignRole)
+	// 设置路由
+	r := router.SetupRouter(
+		userController,
+		roleController,
+		permissionController,
+	)
 
-	r.Run(":8080")
+	r.Run(":" + cfg.Server.Port)
 }

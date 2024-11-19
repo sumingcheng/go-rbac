@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"rbac/dto"
-	"rbac/model"
+	"net/http"
 	"rbac/service"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,57 +13,60 @@ type UserController struct {
 }
 
 func NewUserController(userService *service.UserService) *UserController {
-	return &UserController{
-		userService: userService,
-	}
+	return &UserController{userService: userService}
 }
 
-// CreateUser 创建用户接口
 func (c *UserController) CreateUser(ctx *gin.Context) {
-	var user model.User
-	if err := ctx.ShouldBindJSON(&user); err != nil {
-		ctx.JSON(400, dto.Response{
-			Code:    400,
-			Message: "Invalid request body",
-			Data:    nil,
-		})
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required,min=6"`
+		Email    string `json:"email" binding:"required,email"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	userDTO, err := c.userService.CreateUser(&user)
-	if err != nil {
-		ctx.JSON(500, dto.Response{
-			Code:    500,
-			Message: err.Error(),
-			Data:    nil,
-		})
+	if err := c.userService.CreateUser(req.Username, req.Password); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx.JSON(200, dto.Response{
-		Code:    200,
-		Message: "Success",
-		Data:    userDTO,
-	})
+	ctx.JSON(http.StatusCreated, gin.H{"message": "用户创建成功"})
 }
 
-// AssignRole 分配角色接口
 func (c *UserController) AssignRole(ctx *gin.Context) {
-	userID := ctx.Param("userID")
-	roleID := ctx.Param("roleID")
+	userID, _ := strconv.Atoi(ctx.Param("userID"))
+	roleID, _ := strconv.Atoi(ctx.Param("roleID"))
 
-	err := c.userService.AssignRoleToUser(userID, roleID)
-	if err != nil {
-		ctx.JSON(500, dto.Response{
-			Code:    500,
-			Message: err.Error(),
-			Data:    nil,
-		})
+	if err := c.userService.AssignRole(userID, roleID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx.JSON(200, dto.Response{
-		Code:    200,
-		Message: "Role assigned successfully",
+	ctx.JSON(http.StatusOK, gin.H{"message": "角色分配成功"})
+}
+
+func (c *UserController) Login(ctx *gin.Context) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	token, err := c.userService.Login(req.Username, req.Password)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"token":   token,
+		"message": "登录成功",
 	})
 }
