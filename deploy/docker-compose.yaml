@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # API 服务
+  api:
+    image: go-rbac:v1.0.0
+    container_name: go-rbac-api
+    ports:
+      - '8080:8080'
+    depends_on:
+      - mysql
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - DB_NAME=rbac_db
+    restart: unless-stopped
+    networks:
+      - rbac-network
+
+  # MySQL 服务
+  mysql:
+    image: mysql:8.0
+    container_name: go-rbac-mysql
+    ports:
+      - '3306:3306'
+    environment:
+      - MYSQL_ROOT_PASSWORD=123456
+      - MYSQL_DATABASE=rbac_db
+      - MYSQL_USER=rbac_user
+      - MYSQL_PASSWORD=rbac_pass
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - rbac-network
+
+volumes:
+  mysql_data:
+    name: go-rbac-mysql-data
+
+networks:
+  rbac-network:
+    name: go-rbac-network
