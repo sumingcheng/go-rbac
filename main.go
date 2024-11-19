@@ -4,6 +4,7 @@ import (
 	"rbac/controller"
 	"rbac/internal/config"
 	"rbac/internal/database"
+	"rbac/internal/middleware"
 	"rbac/internal/router"
 	"rbac/service"
 )
@@ -17,6 +18,9 @@ func main() {
 	roleService := service.NewRoleService(db)
 	permissionService := service.NewPermissionService(db)
 
+	// 初始化 middleware
+	authMiddleware := middleware.NewAuthMiddleware(userService)
+
 	// 初始化 controllers
 	userController := controller.NewUserController(userService)
 	roleController := controller.NewRoleController(roleService)
@@ -27,6 +31,7 @@ func main() {
 		userController,
 		roleController,
 		permissionController,
+		authMiddleware,
 	)
 
 	r.Run(":" + cfg.Server.Port)

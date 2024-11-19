@@ -1,9 +1,10 @@
 package router
 
 import (
-	"github.com/gin-gonic/gin"
 	"rbac/controller"
 	"rbac/internal/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
 func SetupRouter(
