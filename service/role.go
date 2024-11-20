@@ -2,7 +2,15 @@ package service
 
 import (
 	"github.com/jmoiron/sqlx"
+	"time"
 )
+
+type Role struct {
+	ID          int       `db:"id" json:"id"`
+	Name        string    `db:"name" json:"name"`
+	Description string    `db:"description" json:"description"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at"`
+}
 
 type RoleService struct {
 	db *sqlx.DB

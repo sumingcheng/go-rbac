@@ -2,11 +2,19 @@ package service
 
 import (
 	"rbac/internal/middleware"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type User struct {
+	ID        int       `db:"id" json:"id"`
+	Username  string    `db:"username" json:"username"`
+	Password  string    `db:"password" json:"-"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
 
 type UserService struct {
 	db *sqlx.DB

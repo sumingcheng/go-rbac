@@ -1,6 +1,17 @@
 package service
 
-import "github.com/jmoiron/sqlx"
+import (
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
+
+type Permission struct {
+	ID          int       `db:"id" json:"id"`
+	Name        string    `db:"name" json:"name"`
+	Description string    `db:"description" json:"description"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at"`
+}
 
 type PermissionService struct {
 	db *sqlx.DB
